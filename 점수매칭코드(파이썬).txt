@@ -1,0 +1,166 @@
+from flask import Flask, request, jsonify
+import pymysql
+
+app = Flask(__name__)
+app.json.ensure_ascii = False
+
+db = pymysql.connect(
+    host="localhost",
+    user="root",
+    password="1234",
+    database="madang_a",
+    charset="utf8",
+    cursorclass=pymysql.cursors.DictCursor
+)
+
+@app.route('/recommend', methods=['POST'])
+def recommend():
+
+    # 웹사이트에서 사용자 입력 받기
+    data = request.json
+
+    age = data['age']                         # 연령
+    region = data['region']                   # 거주지
+    gender = data['gender']                   # 성별
+    employment = data['employment']           # 재직상태
+    household = data['household']             # 가구특성
+    vulnerable = data['vulnerable']           # 취약계층 여부
+    military = data['military']               # 병역 상태
+    income = data['income']                   # 소득 현황
+
+    cursor = db.cursor()
+
+    sql = """
+    SELECT 
+        p.policy_id,
+        p.policy_name,
+        p.region,
+        p.gender_condition,
+        p.military_condition,
+        p.employment_condition,
+        p.vulnerable_condition,
+        p.household_condition,
+        p.min_age,
+        p.max_age,
+        p.min_income,
+        p.max_income,
+        p.housing_type,
+
+        CASE
+
+            -- ✅ 거주지 불일치 → 0점
+            WHEN p.region IS NOT NULL
+             AND p.region NOT LIKE CONCAT('%', %s, '%')
+            THEN 0
+
+            -- ✅ 나이 불일치 → 0점
+            WHEN (p.min_age IS NOT NULL AND %s < p.min_age)
+              OR (p.max_age IS NOT NULL AND %s > p.max_age)
+            THEN 0
+
+            -- ✅ 성별 불일치 → 0점
+            WHEN p.gender_condition IS NOT NULL
+             AND p.gender_condition <> %s
+            THEN 0
+
+            -- ✅ 병역 상태 불일치 → 0점
+            WHEN p.military_condition IS NOT NULL
+             AND p.military_condition <> %s
+            THEN 0
+
+            -- ✅ 재직 상태 불일치 → 0점
+            WHEN p.employment_condition IS NOT NULL
+             AND p.employment_condition <> %s
+            THEN 0
+
+            ELSE
+            (
+
+                -- 기본 점수
+                50
+
+                +
+
+                -- ✅ 소득 점수
+                (CASE
+                    WHEN (p.min_income IS NULL OR p.min_income <= %s)
+                     AND (p.max_income IS NULL OR p.max_income >= %s)
+                    THEN 20
+                    ELSE 0
+                END)
+
+                +
+
+                -- ✅ 가구특성 점수
+                (CASE
+                    WHEN p.household_condition = %s
+                    THEN 15
+                    ELSE 0
+                END)
+
+                +
+
+                -- ✅ 취약계층 여부 점수
+                (CASE
+                    WHEN p.vulnerable_condition = %s
+                    THEN 15
+                    ELSE 0
+                END)
+
+            )
+
+        END AS score
+
+    FROM policy p
+
+    WHERE
+
+        -- 진행중 정책만
+        (
+            CASE 
+                WHEN p.start_date REGEXP '^[0-9]{8}$'
+                    THEN STR_TO_DATE(p.start_date, '%Y%m%d')
+                WHEN p.start_date REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+                    THEN STR_TO_DATE(p.start_date, '%Y-%m-%d')
+            END
+        ) <= CURDATE()
+
+        AND (
+
+            CASE
+                WHEN p.end_date REGEXP '^[0-9]{8}$'
+                    THEN STR_TO_DATE(p.end_date, '%Y%m%d')
+                WHEN p.end_date REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+                    THEN STR_TO_DATE(p.end_date, '%Y-%m-%d')
+                ELSE '9999-12-31'
+
+            END
+
+        ) >= CURDATE()
+
+    HAVING score > 0
+
+    ORDER BY score DESC
+
+    LIMIT 10
+    """
+
+    cursor.execute(sql, (
+        region,
+        age,
+        age,
+        gender,
+        military,
+        employment,
+        income,
+        income,
+        household,
+        vulnerable
+    ))
+
+    result = cursor.fetchall()
+
+    return jsonify(result)
+
+if __name__ == '__main__':
+    app.run(debug=True)

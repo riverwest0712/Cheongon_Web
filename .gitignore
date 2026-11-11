@@ -1,0 +1,22 @@
+# 환경 변수 및 비밀 정보
+.env
+.env.*
+!.env.example
+
+# Node.js
+node_modules/
+
+# 빌드 결과물
+dist/
+build/
+
+# 개발 도구
+.vscode/
+.idea/
+
+# 로그
+*.log
+
+# 운영체제
+.DS_Store
+Thumbs.db

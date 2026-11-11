@@ -1,0 +1,7 @@
+-- cheongon 스키마
+
+host="localhost",
+    user="cheongon",
+    password="manager",
+    database="cheongon",
+    charset="utf8"

@@ -1,0 +1,26 @@
+-- 좋아요, 싫어요 버튼
+
+CREATE TABLE policy_reaction (
+    reaction_id INT AUTO_INCREMENT PRIMARY KEY,
+    policy_id VARCHAR(45),
+    users_id INT,
+    reaction ENUM('like', 'dislike'),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+
+    UNIQUE KEY unique_user_policy (users_id, policy_id)
+);
+
+-- 좋아요, 싫어요 test 데이터
+INSERT IGNORE INTO policy_reaction (policy_id, users_id, reaction)
+VALUES
+('20250716005400111306', 1, 'like'),
+('20250716005400111306', 2, 'like'),
+('20250716005400111306', 3, 'dislike'),
+('20250716005400111306', 4, 'like');
+-- 좋아요, 싫어요 데이터 확인
+SELECT
+    policy_id,
+    SUM(CASE WHEN reaction = 'like' THEN 1 ELSE 0 END) AS likes,
+    SUM(CASE WHEN reaction = 'dislike' THEN 1 ELSE 0 END) AS dislikes
+FROM policy_reaction
+GROUP BY policy_id;

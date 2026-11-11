@@ -1,0 +1,57 @@
+-- -----------------------------------------------------
+-- Table `cheongon`.`policy`
+-- -----------------------------------------------------
+DROP TABLE IF EXISTS `cheongon`.`policy` ;
+
+CREATE TABLE IF NOT EXISTS `cheongon`.`policy` (
+  `policy_id` VARCHAR(45) NOT NULL,
+  `policy_name` VARCHAR(255) NULL,
+  `category` VARCHAR(45) NULL,
+  `category_main` VARCHAR(45) NULL,
+  `category_sub` VARCHAR(45) NULL,
+  `description` LONGTEXT NULL,
+  `support_content` LONGTEXT NULL,
+  `min_age` INT NULL,
+  `max_age` INT NULL,
+  `min_income` INT NULL,
+  `max_income` INT NULL,
+  `region` VARCHAR(45) NULL,
+  `organization` VARCHAR(100) NULL,
+  `apply_url` LONGTEXT NULL,
+  `start_date` VARCHAR(45) NULL,
+  `end_date` VARCHAR(45) NULL,
+  `zip_code` VARCHAR(100) NULL,
+  `created_at` DATETIME NULL,
+  PRIMARY KEY (`policy_id`))
+ENGINE = InnoDB;
+
+-- -----------------------------------------------------
+-- policy 테이블에 support_type 추가
+-- -----------------------------------------------------
+ALTER TABLE policy
+ADD COLUMN support_type VARCHAR(20);
+
+-- policy 테이블 세분화 (신청 조건 / 취업 조건 / 특화 대상 / 신청 상태 등 추가)
+ALTER TABLE policy
+ADD COLUMN gender_condition VARCHAR(10) NULL COMMENT 'all / male / female',
+ADD COLUMN employment_condition VARCHAR(50) NULL COMMENT '재직 / 미취업 / 학생 / 무관',
+ADD COLUMN household_condition VARCHAR(50) NULL COMMENT '1인가구 / 다인가구 / 무관',
+ADD COLUMN vulnerable_condition VARCHAR(50) NULL COMMENT '기초생활수급자 / 차상위 / 장애인 / 무관',
+ADD COLUMN military_condition VARCHAR(50) NULL COMMENT '군필 / 미필 / 무관',
+ADD COLUMN target_status VARCHAR(100) NULL COMMENT '신혼부부 / 대학생 / 청년사업자 / 자립준비청년 등',
+ADD COLUMN apply_condition LONGTEXT NULL COMMENT '신청 조건',
+ADD COLUMN region_condition VARCHAR(255) NULL COMMENT '시/도 또는 시/군/구 단위 조건',
+ADD COLUMN income_condition LONGTEXT NULL COMMENT '소득 조건 설명',
+ADD COLUMN special_target LONGTEXT NULL COMMENT '특화 대상',
+ADD COLUMN apply_start_date VARCHAR(20) NULL,
+ADD COLUMN apply_end_date VARCHAR(20) NULL,
+ADD COLUMN apply_status VARCHAR(20) NULL COMMENT '가능 / 마감 / 예정',
+ADD COLUMN benefit_amount VARCHAR(100) NULL COMMENT '최대 월 20만원 등',
+ADD COLUMN application_method LONGTEXT NULL COMMENT '온라인 / 방문 / 우편 등';
+
+-- `housing_policy`칼럼을 'policy' 테이블에 추가
+ALTER TABLE policy
+ADD COLUMN housing_type VARCHAR(50),
+ADD COLUMN rent_support INT,
+ADD COLUMN deposit_support INT,
+ADD COLUMN house_ownership VARCHAR(20);

@@ -1,0 +1,279 @@
+-- `housing_policy`칼럼을 'policy' 테이블에 추가
+ALTER TABLE policy
+ADD COLUMN housing_type VARCHAR(50),
+ADD COLUMN rent_support INT,
+ADD COLUMN deposit_support INT,
+ADD COLUMN house_ownership VARCHAR(20);
+
+-- 기존 데이터 옮기기
+UPDATE policy p
+JOIN housing_policy h ON p.policy_id = h.policy_id
+SET
+    p.housing_type = h.housing_type,
+    p.rent_support = h.rent_support,
+    p.deposit_support = h.deposit_support,
+    p.house_ownership = h.house_ownership;
+
+-- -----------------------------------------------------
+-- 진행중인 주거정책 필터
+-- -----------------------------------------------------
+UPDATE policy p
+SET
+    p.housing_type = CASE 
+        WHEN p.description LIKE '%월세%' THEN '월세'
+        WHEN p.description LIKE '%전세%' OR p.description LIKE '%보증금%' THEN '전세'
+        WHEN p.description LIKE '%임대%' THEN '임대'
+        WHEN p.description LIKE '%주택%' OR p.description LIKE '%거주%' THEN '주택'
+        WHEN p.description LIKE '%원룸%' THEN '월세'
+        ELSE '기타'
+    END,
+
+    p.house_ownership = '무주택'
+
+WHERE
+
+(
+    p.description LIKE '%주거%'
+    OR p.description LIKE '%월세%'
+    OR p.description LIKE '%전세%'
+    OR p.description LIKE '%임대%'
+    OR p.description LIKE '%주택%'
+    OR p.description LIKE '%원룸%'
+    OR p.description LIKE '%거주%'
+    OR p.description LIKE '%보증금%'
+)
+
+AND NOT (
+    p.policy_name LIKE '%소상공인%'
+    OR p.policy_name LIKE '%점포%'
+    OR p.policy_name LIKE '%창업%'
+)
+
+AND (
+    CASE 
+        WHEN p.start_date REGEXP '^[0-9]{8}$'
+            THEN STR_TO_DATE(p.start_date, '%Y%m%d')
+        WHEN p.start_date REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+            THEN STR_TO_DATE(p.start_date, '%Y-%m-%d')
+    END
+) <= CURDATE()
+
+AND (
+    CASE
+        WHEN p.end_date REGEXP '^[0-9]{8}$'
+            THEN STR_TO_DATE(p.end_date, '%Y%m%d')
+        WHEN p.end_date REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+            THEN STR_TO_DATE(p.end_date, '%Y-%m-%d')
+        ELSE '9999-12-31'
+    END
+) >= CURDATE();
+
+
+-- 위 실행 막히면 실행(KEY 컬럼(보통 PK) 조건 없이 대량 UPDATE 하려고 해서 차단)
+SET SQL_SAFE_UPDATES = 0;
+-- 결과 확인 했으면 실행
+SET SQL_SAFE_UPDATES = 1;
+
+-- -----------------------------------------------------
+-- 현재 주거정책 필터 결과 학인************
+-- -----------------------------------------------------
+SELECT *
+FROM policy
+WHERE housing_type IS NOT NULL;
+
+-- -----------------------------------------------------
+-- 현재 주거정책 필터 결과 수
+-- -----------------------------------------------------
+SELECT COUNT(*) AS housing_policy_count
+FROM policy
+WHERE housing_type IS NOT NULL;
+
+-- -----------------------------------------------------
+-- users 조건에 맞는 policy 확인 + 진행중인 조건만
+-- -----------------------------------------------------
+SELECT 
+    p.policy_id,
+    p.policy_name,
+    p.min_age,
+    p.max_age,
+    p.min_income,
+    p.max_income,
+    p.region,
+    p.housing_type
+FROM policy p
+WHERE
+    -- 나이 조건
+    (p.min_age IS NULL OR p.min_age <= 25)
+    AND (p.max_age IS NULL OR p.max_age >= 25)
+
+    -- 지역 조건
+    AND p.region LIKE '%경기도%'
+
+    -- 주거정책만
+    AND p.housing_type IS NOT NULL
+
+    -- 진행중 정책 조건
+    AND (
+        CASE 
+            WHEN p.start_date REGEXP '^[0-9]{8}$' 
+                THEN STR_TO_DATE(p.start_date, '%Y%m%d')
+            WHEN p.start_date REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+                THEN STR_TO_DATE(p.start_date, '%Y-%m-%d')
+        END
+    ) <= CURDATE()
+
+    AND (
+        CASE 
+            WHEN p.end_date REGEXP '^[0-9]{8}$' 
+                THEN STR_TO_DATE(p.end_date, '%Y%m%d')
+            WHEN p.end_date REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+                THEN STR_TO_DATE(p.end_date, '%Y-%m-%d')
+            ELSE '9999-12-31'
+        END
+    ) >= CURDATE();
+
+-- -----------------------------------------------------
+-- users 조건에 맞는 정책 점수로 매칭
+-- -----------------------------------------------------
+    SELECT 
+    p.policy_id,
+    p.policy_name,
+    p.region,
+    p.min_age,
+    p.max_age,
+    p.min_income,
+    p.max_income,
+    p.housing_type,
+
+    (
+        -- 나이 점수
+        (CASE 
+            WHEN (p.min_age IS NULL OR p.min_age <= 18)
+             AND (p.max_age IS NULL OR p.max_age >= 18)
+            THEN 1 ELSE 0 END)
+
+        +
+
+        -- 소득 점수
+        (CASE 
+            WHEN (p.min_income IS NULL OR p.min_income <= 3000)
+             AND (p.max_income IS NULL OR p.max_income >= 3000)
+            THEN 1 ELSE 0 END)
+
+        +
+
+        -- 주거 유형 점수
+        (CASE 
+            WHEN p.housing_type = '월세' THEN 1
+            ELSE 0
+        END)
+
+    ) AS score
+
+FROM policy p
+
+WHERE
+    -- 지역 필수
+    p.region LIKE '%울산%'
+
+    -- 주거정책만
+    AND p.housing_type IS NOT NULL
+
+    -- 진행중 정책만
+    AND (
+        CASE 
+            WHEN p.start_date REGEXP '^[0-9]{8}$'
+                THEN STR_TO_DATE(p.start_date, '%Y%m%d')
+            WHEN p.start_date REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+                THEN STR_TO_DATE(p.start_date, '%Y-%m-%d')
+        END
+    ) <= CURDATE()
+
+    AND (
+        CASE
+            WHEN p.end_date REGEXP '^[0-9]{8}$'
+                THEN STR_TO_DATE(p.end_date, '%Y%m%d')
+            WHEN p.end_date REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+                THEN STR_TO_DATE(p.end_date, '%Y-%m-%d')
+            ELSE '9999-12-31'
+        END
+    ) >= CURDATE()
+
+ORDER BY score DESC
+LIMIT 10;
+
+-- 점수 매칭 + 거주지,나이 불일치 >> 0점
+SELECT 
+    p.policy_id,
+    p.policy_name,
+    p.region,
+    p.min_age,
+    p.max_age,
+    p.min_income,
+    p.max_income,
+    p.housing_type,
+
+    CASE
+        -- 거주지 불일치 → 0점
+        WHEN p.region NOT LIKE '%울산%' THEN 0
+
+        -- 나이 불일치 → 0점
+        WHEN (p.min_age IS NOT NULL AND 18 < p.min_age)
+          OR (p.max_age IS NOT NULL AND 18 > p.max_age)
+        THEN 0
+
+        -- 조건 통과 시 점수 계산
+        ELSE
+        (
+            -- 나이 점수
+            (CASE 
+                WHEN (p.min_age IS NULL OR p.min_age <= 18)
+                 AND (p.max_age IS NULL OR p.max_age >= 18)
+                THEN 1 ELSE 0 END)
+
+            +
+
+            -- 소득 점수
+            (CASE 
+                WHEN (p.min_income IS NULL OR p.min_income <= 3000)
+                 AND (p.max_income IS NULL OR p.max_income >= 3000)
+                THEN 1 ELSE 0 END)
+
+            +
+
+            -- 주거 유형 점수
+            (CASE 
+                WHEN p.housing_type = '월세' THEN 1
+                ELSE 0
+            END)
+        )
+    END AS score
+
+FROM policy p
+
+WHERE
+    -- 주거정책만
+    p.housing_type IS NOT NULL
+
+    -- 진행중 정책만
+    AND (
+        CASE 
+            WHEN p.start_date REGEXP '^[0-9]{8}$'
+                THEN STR_TO_DATE(p.start_date, '%Y%m%d')
+            WHEN p.start_date REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+                THEN STR_TO_DATE(p.start_date, '%Y-%m-%d')
+        END
+    ) <= CURDATE()
+
+    AND (
+        CASE
+            WHEN p.end_date REGEXP '^[0-9]{8}$'
+                THEN STR_TO_DATE(p.end_date, '%Y%m%d')
+            WHEN p.end_date REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+                THEN STR_TO_DATE(p.end_date, '%Y-%m-%d')
+            ELSE '9999-12-31'
+        END
+    ) >= CURDATE()
+
+ORDER BY score DESC
+LIMIT 10;

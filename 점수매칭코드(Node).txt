@@ -1,0 +1,175 @@
+const express = require('express');
+const mysql = require('mysql2');
+const cors = require('cors');
+
+const app = express();
+
+app.use(cors());
+app.use(express.json());
+
+const db = mysql.createConnection({
+    host: 'localhost',
+    user: 'root',
+    password: '1234',
+    database: 'madang_a'
+});
+
+app.post('/recommend', (req, res) => {
+
+    // 사용자 입력값
+    const {
+        age,
+        region,
+        gender,
+        employment,
+        household,
+        vulnerable,
+        military,
+        income
+    } = req.body;
+
+    const sql = `
+    SELECT 
+        p.policy_id,
+        p.policy_name,
+        p.region,
+        p.gender_condition,
+        p.military_condition,
+        p.employment_condition,
+        p.vulnerable_condition,
+        p.household_condition,
+        p.min_age,
+        p.max_age,
+        p.min_income,
+        p.max_income,
+        p.housing_type,
+
+        CASE
+
+            -- 거주지 불일치
+            WHEN p.region IS NOT NULL
+             AND p.region NOT LIKE CONCAT('%', ?, '%')
+            THEN 0
+
+            -- 나이 불일치
+            WHEN (p.min_age IS NOT NULL AND ? < p.min_age)
+              OR (p.max_age IS NOT NULL AND ? > p.max_age)
+            THEN 0
+
+            -- 성별 불일치
+            WHEN p.gender_condition IS NOT NULL
+             AND p.gender_condition <> ?
+            THEN 0
+
+            -- 병역 상태 불일치
+            WHEN p.military_condition IS NOT NULL
+             AND p.military_condition <> ?
+            THEN 0
+
+            -- 재직 상태 불일치
+            WHEN p.employment_condition IS NOT NULL
+             AND p.employment_condition <> ?
+            THEN 0
+
+            ELSE
+            (
+
+                -- 기본 점수
+                50
+
+                +
+
+                -- 소득 점수
+                (CASE
+                    WHEN (p.min_income IS NULL OR p.min_income <= ?)
+                     AND (p.max_income IS NULL OR p.max_income >= ?)
+                    THEN 20
+                    ELSE 0
+                END)
+
+                +
+
+                -- 가구특성 점수
+                (CASE
+                    WHEN p.household_condition = ?
+                    THEN 15
+                    ELSE 0
+                END)
+
+                +
+
+                -- 취약계층 점수
+                (CASE
+                    WHEN p.vulnerable_condition = ?
+                    THEN 15
+                    ELSE 0
+                END)
+
+            )
+
+        END AS score
+
+    FROM policy p
+
+    WHERE
+
+        (
+            CASE 
+                WHEN p.start_date REGEXP '^[0-9]{8}$'
+                    THEN STR_TO_DATE(p.start_date, '%Y%m%d')
+                WHEN p.start_date REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+                    THEN STR_TO_DATE(p.start_date, '%Y-%m-%d')
+            END
+        ) <= CURDATE()
+
+        AND (
+
+            CASE
+                WHEN p.end_date REGEXP '^[0-9]{8}$'
+                    THEN STR_TO_DATE(p.end_date, '%Y%m%d')
+                WHEN p.end_date REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+                    THEN STR_TO_DATE(p.end_date, '%Y-%m-%d')
+                ELSE '9999-12-31'
+
+            END
+
+        ) >= CURDATE()
+
+    HAVING score > 0
+
+    ORDER BY score DESC
+
+    LIMIT 10
+    `;
+
+    db.query(
+        sql,
+        [
+            region,
+            age,
+            age,
+            gender,
+            military,
+            employment,
+            income,
+            income,
+            household,
+            vulnerable
+        ],
+        (err, results) => {
+
+            if (err) {
+                console.log(err);
+                return res.status(500).json({
+                    error: 'DB 오류'
+                });
+            }
+
+            res.json(results);
+        }
+    );
+});
+
+app.listen(5000, () => {
+    console.log('서버 실행 중');
+});

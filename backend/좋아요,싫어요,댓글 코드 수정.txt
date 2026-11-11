@@ -1,0 +1,12 @@
+-- 좋아요, 싫어요 (test 데이터)
+
+INSERT INTO policy_reaction(policy_id, users_id, reaction, comment_text)
+VALUES
+('20250716005400111306', 1, 'like', '정보가 좋아요'),
+('20250716005400111306', 2, 'like', '정보가 만족스러워요'),
+('20250716005400111306', 3, 'like', '정보가 좋아요'),
+('20250716005400111306', 4, 'dislike', '정보가 싫어요') AS new_data
+
+ON DUPLICATE KEY UPDATE
+reaction = new_data.reaction,
+comment_text = new_data.comment_text;

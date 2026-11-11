@@ -1,0 +1,33 @@
+-- 리액션 테이블에 댓글 칼럼 추가
+
+ALTER TABLE policy_reaction
+ADD COLUMN comment_text TEXT;
+
+-- coment 테이블 데이터를 reaction 테이블에 옮김
+
+UPDATE policy_reaction pr
+JOIN policy_comment pc
+ON pr.policy_id = pc.policy_id
+AND pr.users_id = pc.users_id
+SET pr.comment_text = pc.comment_text;
+
+-- 확인
+
+SELECT *
+FROM policy_reaction
+WHERE comment_text IS NOT NULL;
+
+-- 댓글 테이블 삭제
+
+DROP TABLE policy_comment;
+
+-- users_id, policy_id 외래키로 추가
+
+ALTER TABLE policy_reaction
+ADD CONSTRAINT fk_reaction_user
+FOREIGN KEY (users_id)
+REFERENCES users(users_id),
+
+ADD CONSTRAINT fk_reaction_policy
+FOREIGN KEY (policy_id)
+REFERENCES policy(policy_id);

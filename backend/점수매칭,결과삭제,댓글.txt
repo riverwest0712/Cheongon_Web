@@ -1,0 +1,115 @@
+-- 점수 매칭 + 거주지,나이 불일치 >> 0점
+
+SELECT 
+    p.policy_id,
+    p.policy_name,
+    p.region,
+    p.min_age,
+    p.max_age,
+    p.min_income,
+    p.max_income,
+    h.housing_type,
+
+    CASE
+        -- ✅ 거주지 불일치하면 0점
+        WHEN p.region NOT LIKE '%울산%' THEN 0
+
+        -- ✅ 나이 불일치하면 0점
+        WHEN (p.min_age IS NOT NULL AND 18 < p.min_age)
+          OR (p.max_age IS NOT NULL AND 18 > p.max_age)
+        THEN 0
+
+        -- ✅ 둘 다 통과하면 기존 점수 계산
+        ELSE
+        (
+            -- 나이 점수
+            (CASE 
+                WHEN (p.min_age IS NULL OR p.min_age <= 18)
+                 AND (p.max_age IS NULL OR p.max_age >= 18)
+                THEN 1 ELSE 0 END)
+
+            +
+
+            -- 소득 점수
+            (CASE 
+                WHEN (p.min_income IS NULL OR p.min_income <= 3000)
+                 AND (p.max_income IS NULL OR p.max_income >= 3000)
+                THEN 1 ELSE 0 END)
+
+            +
+
+            -- 주거 유형 점수
+            (CASE 
+                WHEN h.housing_type = '월세' THEN 1
+                ELSE 0
+            END)
+        )
+    END AS score
+
+FROM policy p
+JOIN housing_policy h ON p.policy_id = h.policy_id
+
+WHERE
+    -- 진행중 정책만
+    (
+        CASE 
+            WHEN p.start_date REGEXP '^[0-9]{8}$' 
+                THEN STR_TO_DATE(p.start_date, '%Y%m%d')
+            WHEN p.start_date REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+                THEN STR_TO_DATE(p.start_date, '%Y-%m-%d')
+        END
+    ) <= CURDATE()
+
+    AND (
+        CASE 
+            WHEN p.end_date REGEXP '^[0-9]{8}$' 
+                THEN STR_TO_DATE(p.end_date, '%Y%m%d')
+            WHEN p.end_date REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+                THEN STR_TO_DATE(p.end_date, '%Y-%m-%d')
+            ELSE '9999-12-31'
+        END
+    ) >= CURDATE()
+
+ORDER BY score DESC
+LIMIT 10;
+
+
+
+-- 결과 30초 후 삭제
+
+CREATE EVENT auto_delete_recommendation
+ON SCHEDULE EVERY 30 SECOND
+DO
+DELETE FROM recommendation
+WHERE recommended_at < NOW() - INTERVAL 30 SECOND;
+  -- 추천 결과 다시 확인
+ SELECT *
+FROM recommendation;
+
+
+
+-- 댓글 테이블
+
+CREATE TABLE policy_comment (
+    comment_id INT AUTO_INCREMENT PRIMARY KEY,
+    policy_id VARCHAR(45),
+    users_id INT,
+    comment_text TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+
+-- 댓글 저장
+
+INSERT INTO policy_comment(policy_id, users_id, comment_text)
+VALUES
+('20250716005400111306', 1, '정보가 좋아요'),
+('20250716005400111306', 2, '정보가 만족스러워요');
+
+
+
+-- 넣은 댓글 보기
+
+SELECT comment_id, users_id, comment_text, created_at
+FROM policy_comment
+WHERE policy_id = '20250716005400111306';
